@@ -1,3 +1,9 @@
+// 环境配置
+const ENV_CONFIG = {
+  GEMINI_API_KEY: Deno.env.get('GEMINI_API_KEY') || '',
+  PORT: parseInt(Deno.env.get('PORT') || '8000'),
+};
+
 const getContentType = (path: string): string => {
   const ext = path.split('.').pop()?.toLowerCase() || '';
   const types: Record<string, string> = {
@@ -15,54 +21,115 @@ const getContentType = (path: string): string => {
 
 async function handleWebSocket(req: Request): Promise<Response> {
   const { socket: clientWs, response } = Deno.upgradeWebSocket(req);
-  
+
   const url = new URL(req.url);
-  const targetUrl = `wss://generativelanguage.googleapis.com${url.pathname}${url.search}`;
-  
-  console.log('Target URL:', targetUrl);
-  
-  const pendingMessages: string[] = [];
-  const targetWs = new WebSocket(targetUrl);
-  
-  targetWs.onopen = () => {
-    console.log('Connected to Gemini');
-    pendingMessages.forEach(msg => targetWs.send(msg));
-    pendingMessages.length = 0;
+
+  // 获取 API Key: 优先使用 URL 参数，否则使用环境变量
+  let apiKey = url.searchParams.get('key');
+  if (!apiKey && ENV_CONFIG.GEMINI_API_KEY) {
+    apiKey = ENV_CONFIG.GEMINI_API_KEY;
+    console.log('[WebSocket] Using default API key from environment');
+  }
+
+  if (!apiKey) {
+    console.error('[WebSocket] No API key provided');
+    clientWs.close(1008, 'API key required');
+    return response;
+  }
+
+  // 构建目标 URL (移除原有的 key 参数，使用我们的)
+  const targetPath = url.pathname + url.search.replace(/[?&]key=[^&]*/, '');
+  const separator = targetPath.includes('?') ? '&' : '?';
+  const targetUrl = `wss://generativelanguage.googleapis.com${targetPath}${separator}key=${apiKey}`;
+
+  console.log('[WebSocket] Target:', targetUrl.replace(apiKey, '***'));
+
+  let targetWs: WebSocket | null = null;
+  const pendingMessages: (string | Blob)[] = [];
+  let isConnecting = false;
+
+  clientWs.onopen = () => {
+    console.log('[WebSocket] Client connected');
   };
 
   clientWs.onmessage = (event) => {
-    console.log('Client message received');
-    if (targetWs.readyState === WebSocket.OPEN) {
-      targetWs.send(event.data);
-    } else {
-      pendingMessages.push(event.data);
-    }
-  };
+    console.log('[WebSocket] Client message received');
 
-  targetWs.onmessage = (event) => {
-    console.log('Gemini message received');
-    if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(event.data);
+    // 如果目标连接还没建立,加入队列
+    if (!targetWs || targetWs.readyState !== WebSocket.OPEN) {
+      pendingMessages.push(event.data);
+
+      // 首次消息时尝试连接到 Gemini
+      if (!isConnecting && !targetWs) {
+        isConnecting = true;
+        connectToGemini();
+      }
+      return;
     }
+
+    // 转发到 Gemini
+    targetWs.send(event.data);
   };
 
   clientWs.onclose = (event) => {
-    console.log('Client connection closed');
-    if (targetWs.readyState === WebSocket.OPEN) {
-      targetWs.close(1000, event.reason);
+    console.log(`[WebSocket] Client closed: code=${event.code}`);
+    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+      targetWs.close(1000, 'Client disconnected');
     }
   };
 
-  targetWs.onclose = (event) => {
-    console.log('Gemini connection closed');
-    if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.close(event.code, event.reason);
-    }
+  clientWs.onerror = () => {
+    console.error('[WebSocket] Client error');
   };
 
-  targetWs.onerror = (error) => {
-    console.error('Gemini WebSocket error:', error);
-  };
+  function connectToGemini() {
+    try {
+      console.log('[WebSocket] Connecting to Gemini API...');
+      targetWs = new WebSocket(targetUrl);
+
+      targetWs.onopen = () => {
+        console.log('[WebSocket] Connected to Gemini API');
+
+        // 发送队列中的消息
+        if (pendingMessages.length > 0) {
+          console.log(`[WebSocket] Sending ${pendingMessages.length} queued messages`);
+          pendingMessages.forEach(msg => {
+            if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+              targetWs.send(msg);
+            }
+          });
+          pendingMessages.length = 0;
+        }
+      };
+
+      targetWs.onmessage = (event) => {
+        console.log('[WebSocket] Gemini message received');
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(event.data);
+        }
+      };
+
+      targetWs.onerror = () => {
+        console.error('[WebSocket] Gemini connection error');
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.close(1011, 'Gemini API error');
+        }
+      };
+
+      targetWs.onclose = (event) => {
+        console.log(`[WebSocket] Gemini closed: code=${event.code}, reason=${event.reason || 'none'}`);
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.close(event.code, event.reason || 'Gemini closed');
+        }
+      };
+
+    } catch (error) {
+      console.error('[WebSocket] Failed to connect to Gemini:', error);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.close(1011, 'Connection failed');
+      }
+    }
+  }
 
   return response;
 }
@@ -93,6 +160,19 @@ async function handleRequest(req: Request): Promise<Response> {
     return handleWebSocket(req);
   }
 
+  // 配置 API 端点
+  if (url.pathname === '/api/config') {
+    return new Response(JSON.stringify({
+      hasDefaultApiKey: !!ENV_CONFIG.GEMINI_API_KEY,
+    }), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json;charset=UTF-8',
+        'access-control-allow-origin': '*',
+      }
+    });
+  }
+
   if (url.pathname.endsWith("/chat/completions") ||
       url.pathname.endsWith("/embeddings") ||
       url.pathname.endsWith("/models")) {
@@ -118,7 +198,7 @@ async function handleRequest(req: Request): Promise<Response> {
     });
   } catch (e) {
     console.error('Error details:', e);
-    return new Response('Not Found', { 
+    return new Response('Not Found', {
       status: 404,
       headers: {
         'content-type': 'text/plain;charset=UTF-8',
@@ -127,4 +207,4 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 }
 
-Deno.serve(handleRequest); 
+Deno.serve(handleRequest);
