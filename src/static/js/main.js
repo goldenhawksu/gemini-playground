@@ -29,6 +29,7 @@ const screenContainer = document.getElementById('screen-container');
 const screenPreview = document.getElementById('screen-preview');
 const inputAudioVisualizer = document.getElementById('input-audio-visualizer');
 const apiKeyInput = document.getElementById('api-key');
+const modelNameInput = document.getElementById('model-name-input');
 const voiceSelect = document.getElementById('voice-select');
 const languageSelect = document.getElementById('language-select');
 const fpsInput = document.getElementById('fps-input');
@@ -41,6 +42,7 @@ const responseTypeSelect = document.getElementById('response-type-select');
 
 // Load saved values from localStorage
 const savedApiKey = localStorage.getItem('gemini_api_key');
+const savedModelName = localStorage.getItem('gemini_model_name');
 const savedVoice = localStorage.getItem('gemini_voice');
 const savedLanguage = localStorage.getItem('gemini_language');
 const savedFPS = localStorage.getItem('video_fps');
@@ -49,6 +51,9 @@ const savedSystemInstruction = localStorage.getItem('system_instruction');
 
 if (savedApiKey) {
     apiKeyInput.value = savedApiKey;
+}
+if (savedModelName) {
+    modelNameInput.value = savedModelName;
 }
 if (savedVoice) {
     voiceSelect.value = savedVoice;
@@ -264,18 +269,22 @@ async function connectToWebsocket() {
 
     // Save values to localStorage
     localStorage.setItem('gemini_api_key', apiKeyInput.value);
+    localStorage.setItem('gemini_model_name', modelNameInput.value);
     localStorage.setItem('gemini_voice', voiceSelect.value);
     localStorage.setItem('gemini_language', languageSelect.value);
     localStorage.setItem('system_instruction', systemInstructionInput.value);
 
+    // 使用自定义模型名称(如果提供),否则使用配置中的默认值
+    const modelName = modelNameInput.value.trim() || CONFIG.API.MODEL_NAME;
+
     const config = {
-        model: CONFIG.API.MODEL_NAME,
+        model: modelName,
         generationConfig: {
             responseModalities: responseTypeSelect.value,
             speechConfig: {
                 languageCode: languageSelect.value,
-                voiceConfig: { 
-                    prebuiltVoiceConfig: { 
+                voiceConfig: {
+                    prebuiltVoiceConfig: {
                         voiceName: voiceSelect.value    // You can change voice in the config.js file
                     }
                 }
@@ -287,10 +296,10 @@ async function connectToWebsocket() {
                 text: systemInstructionInput.value     // You can change system instruction in the config.js file
             }],
         }
-    };  
+    };
 
     try {
-        await client.connect(config,apiKeyInput.value);
+        await client.connect(config, apiKeyInput.value);
         isConnected = true;
         await resumeAudioContext();
         connectButton.textContent = 'Disconnect';
@@ -300,7 +309,7 @@ async function connectToWebsocket() {
         micButton.disabled = false;
         cameraButton.disabled = false;
         screenButton.disabled = false;
-        logMessage('Connected to Gemini Multimodal Live API', 'system');
+        logMessage(`Connected to Gemini (${modelName})`, 'system');
     } catch (error) {
         const errorMessage = error.message || 'Unknown error';
         Logger.error('Connection error:', error);

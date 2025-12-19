@@ -607,7 +607,16 @@ body {
 }
 
 
-.fps-help {
+.fps-help, .model-help {
     color: #666;
     font-size: 12px;
+}
+
+#model-name-input {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
 }

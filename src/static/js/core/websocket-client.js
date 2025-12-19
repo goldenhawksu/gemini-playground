@@ -45,7 +45,7 @@ export class MultimodalLiveClient extends EventEmitter {
      * The configuration can include model settings, generation config, system instructions, and tools.
      *
      * @param {Object} config - The configuration for the connection.
-     * @param {string} config.model - The model to use (e.g., 'gemini-2.0-flash-exp').
+     * @param {string} config.model - The model to use (e.g., 'gemini-2.5-flash-native-audio-preview-12-2025').
      * @param {Object} config.generationConfig - Configuration for content generation.
      * @param {string[]} config.generationConfig.responseModalities - The modalities for the response (e.g., "audio", "text").
      * @param {Object} config.generationConfig.speechConfig - Configuration for speech generation.
@@ -55,10 +55,17 @@ export class MultimodalLiveClient extends EventEmitter {
      * @param {Object[]} config.systemInstruction.parts - Parts of the system instruction.
      * @param {string} config.systemInstruction.parts[].text - Text content of the instruction part.
      * @param {Object[]} [config.tools] - Additional tools to be used by the model.
+     * @param {string} apiKey - API key for authentication
+     * @param {string} [customModel] - Optional custom model name to override config
      * @returns {Promise<boolean>} - Resolves with true when the connection is established.
      * @throws {ApplicationError} - Throws an error if the connection fails.
      */
-    connect(config,apiKey) {
+    connect(config, apiKey, customModel) {
+        // 如果提供了自定义模型名称，覆盖配置中的模型
+        if (customModel) {
+            config = { ...config, model: customModel };
+        }
+
         this.config = {
             ...config,
             tools: [

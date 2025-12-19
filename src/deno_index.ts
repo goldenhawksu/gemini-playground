@@ -1,6 +1,9 @@
 // 环境配置
 const ENV_CONFIG = {
   GEMINI_API_KEY: Deno.env.get('GEMINI_API_KEY') || '',
+  GEMINI_BASE_URL: Deno.env.get('GEMINI_BASE_URL') || 'wss://generativelanguage.googleapis.com',
+  GEMINI_MODEL_NAME: Deno.env.get('GEMINI_MODEL_NAME') || 'models/gemini-2.5-flash-native-audio-preview-12-2025',
+  LIVEAPI_PROXY: Deno.env.get('LIVEAPI_PROXY') || '',
   PORT: parseInt(Deno.env.get('PORT') || '8000'),
 };
 
@@ -37,12 +40,22 @@ async function handleWebSocket(req: Request): Promise<Response> {
     return response;
   }
 
-  // 构建目标 URL (移除原有的 key 参数，使用我们的)
+  // 构建目标 URL
+  // 使用环境变量中的 Base URL (如果配置了代理)
+  const baseUrl = ENV_CONFIG.GEMINI_BASE_URL;
   const targetPath = url.pathname + url.search.replace(/[?&]key=[^&]*/, '');
   const separator = targetPath.includes('?') ? '&' : '?';
-  const targetUrl = `wss://generativelanguage.googleapis.com${targetPath}${separator}key=${apiKey}`;
+  const targetUrl = `${baseUrl}${targetPath}${separator}key=${apiKey}`;
 
+  console.log('[WebSocket] Base URL:', baseUrl);
   console.log('[WebSocket] Target:', targetUrl.replace(apiKey, '***'));
+
+  // 如果配置了代理，记录日志
+  if (ENV_CONFIG.LIVEAPI_PROXY) {
+    console.log('[WebSocket] Proxy configured:', ENV_CONFIG.LIVEAPI_PROXY);
+    console.warn('[WebSocket] Note: Deno native WebSocket does not support SOCKS5 proxy directly.');
+    console.warn('[WebSocket] For proxy support, please deploy to Deno Deploy or use VPN.');
+  }
 
   // 立即创建 WebSocket 连接（7月2日的简单实现）
   const pendingMessages: (string | Blob)[] = [];
@@ -123,6 +136,9 @@ async function handleRequest(req: Request): Promise<Response> {
   if (url.pathname === '/api/config') {
     return new Response(JSON.stringify({
       hasDefaultApiKey: !!ENV_CONFIG.GEMINI_API_KEY,
+      modelName: ENV_CONFIG.GEMINI_MODEL_NAME,
+      baseUrl: ENV_CONFIG.GEMINI_BASE_URL !== 'wss://generativelanguage.googleapis.com' ? ENV_CONFIG.GEMINI_BASE_URL : null,
+      proxyUrl: ENV_CONFIG.LIVEAPI_PROXY || null,
     }), {
       status: 200,
       headers: {
