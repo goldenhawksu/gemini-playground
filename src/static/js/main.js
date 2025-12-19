@@ -277,7 +277,7 @@ async function connectToWebsocket() {
 
     // 如果用户没有输入 API Key,且服务器也没有配置默认 Key,则提示用户
     if (!userApiKey && !hasDefaultKey) {
-        logMessage('Please input API Key or configure GEMINI_API_KEY on server', 'system');
+        logMessage('⚠️ 请输入 API Key 或在服务器配置 GEMINI_API_KEY 环境变量', 'system');
         return;
     }
 
@@ -327,13 +327,13 @@ async function connectToWebsocket() {
         cameraButton.disabled = false;
         screenButton.disabled = false;
 
-        // 显示使用的 Key 来源
-        const keySource = userApiKey ? 'user key' : 'server default key';
-        logMessage(`Connected to Gemini (${modelName}, ${keySource})`, 'system');
+        // 显示友好的连接成功消息
+        const keySource = userApiKey ? '使用您的 API Key' : '使用服务器默认配置';
+        logMessage(`🎉 正在连接到 Gemini (${modelName})...`, 'system');
     } catch (error) {
         const errorMessage = error.message || 'Unknown error';
         Logger.error('Connection error:', error);
-        logMessage(`Connection error: ${errorMessage}`, 'system');
+        logMessage(`❌ 连接失败: ${errorMessage}`, 'system');
         isConnected = false;
         connectButton.textContent = 'Connect';
         connectButton.classList.remove('connected');
@@ -367,12 +367,12 @@ function disconnectFromWebsocket() {
     micButton.disabled = true;
     cameraButton.disabled = true;
     screenButton.disabled = true;
-    logMessage('Disconnected from server', 'system');
-    
+    logMessage('👋 已断开连接', 'system');
+
     if (videoManager) {
         stopVideo();
     }
-    
+
     if (screenRecorder) {
         stopScreenSharing();
     }
@@ -392,15 +392,32 @@ function handleSendMessage() {
 
 // Event Listeners
 client.on('open', () => {
-    logMessage('WebSocket connection opened', 'system');
+    Logger.debug('WebSocket connection opened');
+    // 不显示技术消息,等待 setupcomplete 时显示友好消息
 });
 
 client.on('log', (log) => {
-    logMessage(`${log.type}: ${JSON.stringify(log.message)}`, 'system');
+    // 过滤掉技术细节日志,仅显示用户友好的消息
+    const userFriendlyTypes = ['client.open', 'server.close'];
+    const suppressedTypes = ['server.content', 'client.send', 'server.send', 'client.realtimeInput'];
+
+    if (suppressedTypes.includes(log.type)) {
+        // 技术日志不显示给用户,仅在控制台记录
+        Logger.debug(`[${log.type}]`, log.message);
+        return;
+    }
+
+    // 只显示重要的系统消息
+    if (userFriendlyTypes.includes(log.type)) {
+        const message = typeof log.message === 'string' ? log.message : JSON.stringify(log.message);
+        logMessage(message, 'system');
+    }
 });
 
 client.on('close', (event) => {
-    logMessage(`WebSocket connection closed (code ${event.code})`, 'system');
+    const reason = event.reason ? `: ${event.reason}` : '';
+    Logger.info(`WebSocket connection closed (code ${event.code}${reason})`);
+    // 不显示技术细节,用户已经看到 "已断开连接" 消息
 });
 
 client.on('audio', async (data) => {
@@ -423,7 +440,12 @@ client.on('content', (data) => {
             Logger.info('Tool usage completed');
         }
 
-        const text = data.modelTurn.parts.map(part => part.text).join('');
+        // 过滤掉内部思考过程 (thought: true),仅显示最终回复
+        const text = data.modelTurn.parts
+            .filter(part => !part.thought)  // 排除内部思考
+            .map(part => part.text)
+            .join('');
+
         if (text) {
             logMessage(text, 'ai');
         }
@@ -434,16 +456,17 @@ client.on('interrupted', () => {
     audioStreamer?.stop();
     isUsingTool = false;
     Logger.info('Model interrupted');
-    logMessage('Model interrupted', 'system');
+    // 不显示中断消息,避免打扰用户
 });
 
 client.on('setupcomplete', () => {
-    logMessage('Setup complete', 'system');
+    logMessage('✅ 连接成功，可以开始对话了', 'system');
 });
 
 client.on('turncomplete', () => {
     isUsingTool = false;
-    logMessage('Turn complete', 'system');
+    // 不显示 turn complete 消息,避免打扰用户
+    Logger.debug('Turn complete');
 });
 
 client.on('error', (error) => {
