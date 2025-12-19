@@ -172,6 +172,13 @@ dist
 .dev.vars
 .wrangler/
 deno.lock
-test/
+
+# Test results and temporary files (保留测试脚本和文档)
+test/*.json
+test/screenshots/*.png
+test/videos/
+.playwright-mcp/
+
+# Documentation temp files
 doc/
 .spec-workflow/
