@@ -134,6 +134,7 @@ async function handleRequest(req: Request): Promise<Response> {
   // 配置 API 端点
   if (url.pathname === '/api/config') {
     return new Response(JSON.stringify({
+      // 安全: 永远不返回实际的 API Key,仅返回是否配置了默认 Key
       hasDefaultApiKey: !!ENV_CONFIG.GEMINI_API_KEY,
       modelName: ENV_CONFIG.GEMINI_MODEL_NAME,
       baseUrl: ENV_CONFIG.GEMINI_BASE_URL !== 'wss://generativelanguage.googleapis.com' ? ENV_CONFIG.GEMINI_BASE_URL : null,

@@ -262,13 +262,29 @@ async function resumeAudioContext() {
  * @returns {Promise<void>}
  */
 async function connectToWebsocket() {
-    if (!apiKeyInput.value) {
-        logMessage('Please input API Key', 'system');
+    // 检查是否有 API Key: 用户输入的或服务器默认的
+    const userApiKey = apiKeyInput.value.trim();
+
+    // 获取服务器配置
+    let hasDefaultKey = false;
+    try {
+        const response = await fetch('/api/config');
+        const serverConfig = await response.json();
+        hasDefaultKey = serverConfig.hasDefaultApiKey;
+    } catch (error) {
+        console.warn('Failed to fetch server config:', error);
+    }
+
+    // 如果用户没有输入 API Key,且服务器也没有配置默认 Key,则提示用户
+    if (!userApiKey && !hasDefaultKey) {
+        logMessage('Please input API Key or configure GEMINI_API_KEY on server', 'system');
         return;
     }
 
-    // Save values to localStorage
-    localStorage.setItem('gemini_api_key', apiKeyInput.value);
+    // 保存用户配置到 LocalStorage (不包括服务器默认的 Key)
+    if (userApiKey) {
+        localStorage.setItem('gemini_api_key', userApiKey);
+    }
     localStorage.setItem('gemini_model_name', modelNameInput.value);
     localStorage.setItem('gemini_voice', voiceSelect.value);
     localStorage.setItem('gemini_language', languageSelect.value);
@@ -299,7 +315,8 @@ async function connectToWebsocket() {
     };
 
     try {
-        await client.connect(config, apiKeyInput.value);
+        // 如果用户输入了 API Key,使用用户的 Key;否则传空字符串,服务器会使用默认 Key
+        await client.connect(config, userApiKey || '');
         isConnected = true;
         await resumeAudioContext();
         connectButton.textContent = 'Disconnect';
@@ -309,7 +326,10 @@ async function connectToWebsocket() {
         micButton.disabled = false;
         cameraButton.disabled = false;
         screenButton.disabled = false;
-        logMessage(`Connected to Gemini (${modelName})`, 'system');
+
+        // 显示使用的 Key 来源
+        const keySource = userApiKey ? 'user key' : 'server default key';
+        logMessage(`Connected to Gemini (${modelName}, ${keySource})`, 'system');
     } catch (error) {
         const errorMessage = error.message || 'Unknown error';
         Logger.error('Connection error:', error);

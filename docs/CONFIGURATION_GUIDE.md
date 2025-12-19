@@ -1,5 +1,14 @@
 # 📖 环境变量和自定义配置使用指南
 
+## 🔒 安全提示
+
+**重要**: 服务器环境变量中的 API Key **永不会**通过网络传输到客户端!
+- 配置 API 仅返回 `hasDefaultApiKey: true/false`
+- 实际 Key 仅在服务器端使用
+- 详见: [API Key 安全机制文档](API_KEY_SECURITY.md)
+
+---
+
 ## 快速开始
 
 ### 1. 设置环境变量 (可选)
@@ -80,7 +89,17 @@ A:
 2. 方法 2: 设置环境变量 `GEMINI_MODEL_NAME` 并重启服务器
 
 ### Q: API Key 存储在哪里?
-A: API Key 仅存储在浏览器的 LocalStorage 中,不会发送到服务器(除了连接 Gemini API 时)。
+A:
+- **服务器配置的 Key**: 存储在环境变量中,永不发送到客户端
+- **用户输入的 Key**: 仅存储在浏览器的 LocalStorage 中
+- **安全保证**: 配置 API 永不返回实际 Key,仅返回布尔值
+
+### Q: 服务器的 API Key 会泄露吗?
+A: **不会**。我们实施了严格的安全机制:
+1. 配置 API 仅返回 `hasDefaultApiKey: true/false`
+2. 实际 Key 永远不通过网络传输
+3. 日志中 Key 替换为 `***`
+4. 详见: [API Key 安全机制文档](API_KEY_SECURITY.md)
 
 ---
 
