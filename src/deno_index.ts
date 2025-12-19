@@ -44,92 +44,51 @@ async function handleWebSocket(req: Request): Promise<Response> {
 
   console.log('[WebSocket] Target:', targetUrl.replace(apiKey, '***'));
 
-  let targetWs: WebSocket | null = null;
+  // 立即创建 WebSocket 连接（7月2日的简单实现）
   const pendingMessages: (string | Blob)[] = [];
-  let isConnecting = false;
+  const targetWs = new WebSocket(targetUrl);
 
-  clientWs.onopen = () => {
-    console.log('[WebSocket] Client connected');
+  targetWs.onopen = () => {
+    console.log('[WebSocket] Connected to Gemini API');
+    // 发送所有待处理的消息
+    pendingMessages.forEach(msg => targetWs.send(msg));
+    pendingMessages.length = 0;
   };
 
   clientWs.onmessage = (event) => {
     console.log('[WebSocket] Client message received');
-
-    // 如果目标连接还没建立,加入队列
-    if (!targetWs || targetWs.readyState !== WebSocket.OPEN) {
+    if (targetWs.readyState === WebSocket.OPEN) {
+      targetWs.send(event.data);
+    } else {
+      // 如果连接还未建立，缓存消息
       pendingMessages.push(event.data);
-
-      // 首次消息时尝试连接到 Gemini
-      if (!isConnecting && !targetWs) {
-        isConnecting = true;
-        connectToGemini();
-      }
-      return;
     }
+  };
 
-    // 转发到 Gemini
-    targetWs.send(event.data);
+  targetWs.onmessage = (event) => {
+    console.log('[WebSocket] Gemini message received');
+    if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.send(event.data);
+    }
   };
 
   clientWs.onclose = (event) => {
     console.log(`[WebSocket] Client closed: code=${event.code}`);
-    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
-      targetWs.close(1000, 'Client disconnected');
+    if (targetWs.readyState === WebSocket.OPEN) {
+      targetWs.close(1000, event.reason);
     }
   };
 
-  clientWs.onerror = () => {
-    console.error('[WebSocket] Client error');
+  targetWs.onclose = (event) => {
+    console.log(`[WebSocket] Gemini closed: code=${event.code}, reason=${event.reason || 'none'}`);
+    if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.close(event.code, event.reason || 'Gemini closed');
+    }
   };
 
-  function connectToGemini() {
-    try {
-      console.log('[WebSocket] Connecting to Gemini API...');
-      targetWs = new WebSocket(targetUrl);
-
-      targetWs.onopen = () => {
-        console.log('[WebSocket] Connected to Gemini API');
-
-        // 发送队列中的消息
-        if (pendingMessages.length > 0) {
-          console.log(`[WebSocket] Sending ${pendingMessages.length} queued messages`);
-          pendingMessages.forEach(msg => {
-            if (targetWs && targetWs.readyState === WebSocket.OPEN) {
-              targetWs.send(msg);
-            }
-          });
-          pendingMessages.length = 0;
-        }
-      };
-
-      targetWs.onmessage = (event) => {
-        console.log('[WebSocket] Gemini message received');
-        if (clientWs.readyState === WebSocket.OPEN) {
-          clientWs.send(event.data);
-        }
-      };
-
-      targetWs.onerror = () => {
-        console.error('[WebSocket] Gemini connection error');
-        if (clientWs.readyState === WebSocket.OPEN) {
-          clientWs.close(1011, 'Gemini API error');
-        }
-      };
-
-      targetWs.onclose = (event) => {
-        console.log(`[WebSocket] Gemini closed: code=${event.code}, reason=${event.reason || 'none'}`);
-        if (clientWs.readyState === WebSocket.OPEN) {
-          clientWs.close(event.code, event.reason || 'Gemini closed');
-        }
-      };
-
-    } catch (error) {
-      console.error('[WebSocket] Failed to connect to Gemini:', error);
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.close(1011, 'Connection failed');
-      }
-    }
-  }
+  targetWs.onerror = (error) => {
+    console.error('[WebSocket] Gemini error:', error);
+  };
 
   return response;
 }
