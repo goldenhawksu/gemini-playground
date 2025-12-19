@@ -1,7 +1,7 @@
 export const CONFIG = {
     API: {
         VERSION: 'v1beta',
-        MODEL_NAME: 'models/gemini-live-2.5-flash-preview'
+        MODEL_NAME: 'models/gemini-2.0-flash-exp'  // 使用支持 bidiGenerateContent 的模型
     },
     // You can change the system instruction to your liking
     SYSTEM_INSTRUCTION: {

@@ -3,6 +3,7 @@ import { blobToJSON, base64ToArrayBuffer } from '../utils/utils.js';
 import { ApplicationError, ErrorCodes } from '../utils/error-boundary.js';
 import { Logger } from '../utils/logger.js';
 import { ToolManager } from '../tools/tool-manager.js';
+import { CONFIG } from '../config/config.js';
 
 /**
  * Client for interacting with the Gemini Multimodal Live API via WebSockets.
@@ -21,7 +22,8 @@ export class MultimodalLiveClient extends EventEmitter {
     constructor() {
         super();
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        this.baseUrl  = `${wsProtocol}//${window.location.host}/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+        const apiVersion = CONFIG.API.VERSION;  // 使用配置文件中的 API 版本
+        this.baseUrl  = `${wsProtocol}//${window.location.host}/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent`;
         this.ws = null;
         this.config = null;
         this.send = this.send.bind(this);
