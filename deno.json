@@ -1,6 +1,6 @@
 {
     "tasks": {
       "start": "deno run --allow-net --allow-read --allow-env src/deno_index.ts",
-      "deploy-push": "deployctl deploy --project=gemini-playground --entrypoint=src/deno_index.ts"
+      "deploy-push": "deployctl deploy --project=gemini-playground --entrypoint=src/deno_deploy_index.ts"
     }
 }
